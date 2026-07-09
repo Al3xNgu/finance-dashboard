@@ -54,6 +54,24 @@ export const envSchema = z.object({
         "production needs a sign-in provider: EMAIL_SERVER+EMAIL_FROM or GOOGLE_CLIENT_ID+GOOGLE_CLIENT_SECRET",
     });
   }
+  const plaidVars = [cfg.PLAID_CLIENT_ID, cfg.PLAID_SECRET];
+  if (plaidVars.some(Boolean)) {
+    if (!plaidVars.every(Boolean)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["PLAID_CLIENT_ID"],
+        message: "PLAID_CLIENT_ID and PLAID_SECRET must be set together",
+      });
+    }
+    if (!cfg.ENCRYPTION_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["ENCRYPTION_KEY"],
+        message:
+          "ENCRYPTION_KEY is required when Plaid is configured (access tokens are encrypted at rest)",
+      });
+    }
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
