@@ -7,5 +7,57 @@ datasource db {
   provider = "postgresql"
 }
 
-// Domain models land per milestone (M1: auth/user, M2: Plaid item/account,
-// M3: transactions/sync, M4: categorization). Full target schema: docs/ARCHITECTURE.md §3.
+// Domain models land per milestone (M2: Plaid item/account, M3: transactions/sync,
+// M4: categorization). Full target schema: docs/ARCHITECTURE.md §3.
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  authAccounts AuthAccount[]
+  sessions     Session[]
+}
+
+// Auth.js "Account" renamed so the domain concept "bank account" owns the
+// good name (D-004). The adapter is given this delegate explicitly.
+model AuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}

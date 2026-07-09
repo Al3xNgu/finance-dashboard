@@ -17,9 +17,15 @@ export const envSchema = z.object({
     .regex(/^postgres(ql)?:\/\//, "DATABASE_URL must be a postgres:// URL"),
 
   // M1 — auth
-  AUTH_SECRET: z.string().min(32).optional(),
+  AUTH_SECRET: z
+    .string()
+    .min(32, "AUTH_SECRET must be at least 32 chars (openssl rand -base64 32)"),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // SMTP for magic-link email. Optional in development (link is logged to the
+  // server console instead); production requires this or a Google OAuth pair.
+  EMAIL_SERVER: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
 
   // M2 — Plaid. Environment switching is env-only by design (ARCHITECTURE.md §6.1).
   PLAID_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
@@ -37,6 +43,17 @@ export const envSchema = z.object({
   // M3 — background jobs
   QUEUE_DRIVER: z.enum(["inprocess", "bullmq"]).default("inprocess"),
   REDIS_URL: z.string().optional(),
+}).superRefine((cfg, ctx) => {
+  const hasGoogle = !!cfg.GOOGLE_CLIENT_ID && !!cfg.GOOGLE_CLIENT_SECRET;
+  const hasEmail = !!cfg.EMAIL_SERVER && !!cfg.EMAIL_FROM;
+  if (cfg.NODE_ENV === "production" && !hasGoogle && !hasEmail) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["EMAIL_SERVER"],
+      message:
+        "production needs a sign-in provider: EMAIL_SERVER+EMAIL_FROM or GOOGLE_CLIENT_ID+GOOGLE_CLIENT_SECRET",
+    });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -7,6 +7,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     env: {
       DATABASE_URL: "postgresql://localhost:5432/finance_dashboard_test",
+      AUTH_SECRET: "vitest-secret-vitest-secret-vitest-secret",
     },
   },
   resolve: {

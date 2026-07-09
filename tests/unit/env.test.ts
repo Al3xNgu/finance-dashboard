@@ -3,6 +3,7 @@ import { parseEnv } from "@/server/lib/env";
 
 const validBase = {
   DATABASE_URL: "postgresql://localhost:5432/finance_dashboard",
+  AUTH_SECRET: "test-secret-test-secret-test-secret-1234",
 };
 
 describe("parseEnv", () => {
@@ -14,7 +15,42 @@ describe("parseEnv", () => {
   });
 
   it("rejects a missing DATABASE_URL with a readable message", () => {
-    expect(() => parseEnv({})).toThrow(/DATABASE_URL/);
+    expect(() =>
+      parseEnv({ AUTH_SECRET: validBase.AUTH_SECRET }),
+    ).toThrow(/DATABASE_URL/);
+  });
+
+  it("rejects a missing or short AUTH_SECRET", () => {
+    expect(() =>
+      parseEnv({ DATABASE_URL: validBase.DATABASE_URL }),
+    ).toThrow(/AUTH_SECRET/);
+    expect(() =>
+      parseEnv({ ...validBase, AUTH_SECRET: "short" }),
+    ).toThrow(/AUTH_SECRET/);
+  });
+
+  it("requires a real sign-in provider in production", () => {
+    expect(() =>
+      parseEnv({ ...validBase, NODE_ENV: "production" }),
+    ).toThrow(/sign-in provider/);
+    // satisfied by SMTP pair
+    expect(
+      parseEnv({
+        ...validBase,
+        NODE_ENV: "production",
+        EMAIL_SERVER: "smtp://mail:587",
+        EMAIL_FROM: "noreply@example.com",
+      }).NODE_ENV,
+    ).toBe("production");
+    // or by Google pair
+    expect(
+      parseEnv({
+        ...validBase,
+        NODE_ENV: "production",
+        GOOGLE_CLIENT_ID: "id",
+        GOOGLE_CLIENT_SECRET: "secret",
+      }).NODE_ENV,
+    ).toBe("production");
   });
 
   it("rejects a non-postgres DATABASE_URL", () => {
