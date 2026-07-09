@@ -21,6 +21,8 @@ model User {
 
   authAccounts AuthAccount[]
   sessions     Session[]
+  plaidItems   PlaidItem[]
+  accounts     Account[]
 }
 
 // Auth.js "Account" renamed so the domain concept "bank account" owns the
@@ -60,4 +62,56 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+enum PlaidItemStatus {
+  ACTIVE // syncing normally
+  LOGIN_REQUIRED // needs Link update mode (M7)
+  ERROR // retryable/unknown error state
+  DISCONNECTED // fatal — history retained read-only
+}
+
+model PlaidItem {
+  id                   String          @id @default(cuid())
+  userId               String
+  plaidItemId          String          @unique
+  encryptedAccessToken String // "v1:<iv>:<ciphertext>:<tag>" AES-256-GCM — never in DTOs or logs
+  institutionId        String
+  institutionName      String
+  status               PlaidItemStatus @default(ACTIVE)
+  errorCode            String?
+  syncCursor           String? // /transactions/sync cursor (M3); null = initial sync
+  lastSyncedAt         DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts Account[]
+
+  @@index([userId])
+  @@index([status, lastSyncedAt]) // fallback poller (M3): stale ACTIVE items
+}
+
+model Account {
+  id                    String   @id @default(cuid())
+  userId                String
+  plaidItemId           String
+  plaidAccountId        String   @unique
+  name                  String
+  officialName          String?
+  mask                  String? // last 4 digits — the only account-number data stored
+  type                  String // depository | credit | loan | investment
+  subtype               String?
+  currentBalanceCents   BigInt?
+  availableBalanceCents BigInt?
+  isoCurrencyCode       String   @default("USD")
+  hidden                Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plaidItem PlaidItem @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([plaidItemId])
 }

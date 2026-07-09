@@ -8,6 +8,7 @@ export default defineConfig({
     env: {
       DATABASE_URL: "postgresql://localhost:5432/finance_dashboard_test",
       AUTH_SECRET: "vitest-secret-vitest-secret-vitest-secret",
+      ENCRYPTION_KEY: Buffer.alloc(32, 9).toString("base64"),
     },
   },
   resolve: {
