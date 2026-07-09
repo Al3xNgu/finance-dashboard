@@ -1,0 +1,11 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Domain models land per milestone (M1: auth/user, M2: Plaid item/account,
+// M3: transactions/sync, M4: categorization). Full target schema: docs/ARCHITECTURE.md §3.
