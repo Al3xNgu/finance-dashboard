@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/server/auth";
+import { AccountsList } from "@/components/accounts-list";
+import { ConnectAccountButton } from "@/components/connect-account-button";
 
 export default async function Home() {
   const session = await auth();
@@ -34,14 +36,19 @@ export default async function Home() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
-        <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Overview
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Signed in as {session.user.email}
-        </p>
-        <div className="mt-6 rounded-xl border border-dashed border-zinc-300 bg-white p-10 text-center text-sm text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-500">
-          Your accounts and transactions will appear here.
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Overview
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Signed in as {session.user.email}
+            </p>
+          </div>
+          <ConnectAccountButton />
+        </div>
+        <div className="mt-6">
+          <AccountsList userId={session.user.id} />
         </div>
       </main>
     </div>
