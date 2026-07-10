@@ -25,6 +25,9 @@ const { dbMock, plaidItemUpsert, accountUpsert, plaidItemFindUnique } =
 
 vi.mock("@/server/db/client", () => ({ db: dbMock }));
 
+const { enqueue } = vi.hoisted(() => ({ enqueue: vi.fn() }));
+vi.mock("@/server/jobs", () => ({ getQueue: () => ({ enqueue, schedule: vi.fn() }) }));
+
 import { decryptSecret } from "@/server/lib/crypto";
 import { exchangePublicToken } from "@/server/services/items";
 import { FakePlaidService } from "@/server/services/plaid/fake";
@@ -99,6 +102,15 @@ describe("exchangePublicToken (token-exchange path)", () => {
     expect(accountUpsert.mock.calls[0][0].create.userId).toBe("user-1");
     expect(dto.institutionName).toBe("First Platypus Bank");
     expect(dto.accountCount).toBe(2);
+  });
+
+  it("enqueues the initial sync off the request path", async () => {
+    await exchangePublicToken("user-1", "public-token-1", makeFake());
+    expect(enqueue).toHaveBeenCalledWith(
+      "sync-item",
+      { itemId: "db-item-1", trigger: "INITIAL" },
+      { dedupKey: "sync-item:db-item-1" },
+    );
   });
 
   it("never returns the access token in the DTO", async () => {

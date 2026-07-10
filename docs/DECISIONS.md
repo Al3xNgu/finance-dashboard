@@ -99,6 +99,15 @@ standards that don't exist yet. From M1 on, isolated features/UI/tests/docs are
 delegated with task specs per the orchestration protocol; the Plaid token-exchange
 path and security-sensitive review are never delegated (per brief).
 
+**D-017 — Production queue driver deferred to M8**
+M3 ships the `JobQueue` interface and the fully tested in-process driver. The
+production driver (BullMQ vs. platform cron/queue — the brief allows either) is
+a deployment decision; implementing BullMQ now would add an unexercisable,
+untestable-locally code path (no Redis on the dev machine). `QUEUE_DRIVER=bullmq`
+fails loudly until M8. Handlers are driver-agnostic and idempotent by
+construction, so the swap is config + one driver file. Rejected: shipping an
+unverified BullMQ driver in M3.
+
 **D-016 — Vitest over Jest**
 First-class TS/ESM without transform config, same assertion API, faster watch mode,
 maintained momentum in the Next.js ecosystem. Rejected: Jest (ESM friction with

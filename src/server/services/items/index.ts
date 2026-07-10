@@ -4,6 +4,7 @@ import { db } from "@/server/db/client";
 import { ConflictError } from "@/server/lib/errors";
 import { centsToNumber } from "@/server/lib/money";
 import { log } from "@/server/lib/request-context";
+import { getQueue } from "@/server/jobs";
 import { getPlaidService } from "@/server/services/plaid";
 import type { PlaidService } from "@/server/services/plaid";
 
@@ -104,6 +105,13 @@ export async function exchangePublicToken(
   log().info(
     { itemId: item.id, institutionId: institution.institutionId, accountCount: accounts.length },
     "plaid item linked",
+  );
+
+  // initial transaction sync happens off the request path
+  await getQueue().enqueue(
+    "sync-item",
+    { itemId: item.id, trigger: "INITIAL" },
+    { dedupKey: `sync-item:${item.id}` },
   );
 
   return {
