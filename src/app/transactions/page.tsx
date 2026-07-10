@@ -1,10 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/server/auth";
-import { AccountsList } from "@/components/accounts-list";
-import { ConnectAccountButton } from "@/components/connect-account-button";
+import { TransactionsExplorer } from "@/components/transactions/transactions-explorer";
 
-export default async function Home() {
+export const metadata: Metadata = { title: "Transactions" };
+
+export default async function TransactionsPage() {
   const session = await auth();
   if (!session?.user) redirect("/signin");
 
@@ -22,13 +24,13 @@ export default async function Home() {
               Finance Dashboard
             </h1>
             <nav className="flex items-center gap-4 text-sm">
-              <Link href="/" className="font-medium text-zinc-900 dark:text-zinc-50">
-                Overview
-              </Link>
               <Link
-                href="/transactions"
+                href="/"
                 className="text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
               >
+                Overview
+              </Link>
+              <Link href="/transactions" className="font-medium text-zinc-900 dark:text-zinc-50">
                 Transactions
               </Link>
             </nav>
@@ -50,19 +52,11 @@ export default async function Home() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Overview
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Signed in as {session.user.email}
-            </p>
-          </div>
-          <ConnectAccountButton />
-        </div>
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Transactions
+        </h2>
         <div className="mt-6">
-          <AccountsList userId={session.user.id} />
+          <TransactionsExplorer />
         </div>
       </main>
     </div>
