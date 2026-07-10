@@ -72,12 +72,20 @@ async function seedItem() {
 beforeEach(async () => {
   // FK-safe order
   await db.transaction.deleteMany();
+  await db.categoryRule.deleteMany();
+  await db.plaidCategoryMapping.deleteMany();
+  await db.category.deleteMany();
   await db.syncLog.deleteMany();
   await db.webhookEvent.deleteMany();
   await db.account.deleteMany();
   await db.plaidItem.deleteMany();
   await db.user.deleteMany();
 });
+
+/** a real category row — categoryId became a true FK in M4 */
+async function seedCategory(slug: string) {
+  return db.category.create({ data: { name: slug, slug, isSystem: true } });
+}
 
 describe("syncItem — reconciliation matrix", () => {
   it("initial sync inserts transactions, persists cursor, logs SUCCESS", async () => {
@@ -111,9 +119,10 @@ describe("syncItem — reconciliation matrix", () => {
     await syncItem(item.id, "INITIAL", fake);
 
     // user manually recategorizes the pending transaction
+    const custom = await seedCategory("cat-custom");
     await db.transaction.update({
       where: { plaidTransactionId: "pend-1" },
-      data: { categoryId: "cat-custom", userCategoryOverride: true },
+      data: { categoryId: custom.id, userCategoryOverride: true },
     });
 
     fake.scriptSyncPage(
@@ -141,7 +150,7 @@ describe("syncItem — reconciliation matrix", () => {
     });
     expect(posted.deletedAt).toBeNull();
     expect(posted.amountCents).toBe(1300n);
-    expect(posted.categoryId).toBe("cat-custom"); // user's decision survived
+    expect(posted.categoryId).toBe(custom.id); // user's decision survived
     expect(posted.userCategoryOverride).toBe(true);
     expect(posted.pendingTransactionId).toBe("pend-1");
   });
@@ -223,9 +232,10 @@ describe("syncItem — reconciliation matrix", () => {
     const fake = new FakePlaidService();
     fake.scriptSyncPage(null, makePage({ added: [makeTxn("t-ovr")] }));
     await syncItem(item.id, "INITIAL", fake);
+    const pinned = await seedCategory("cat-user");
     await db.transaction.update({
       where: { plaidTransactionId: "t-ovr" },
-      data: { categoryId: "cat-user", userCategoryOverride: true },
+      data: { categoryId: pinned.id, userCategoryOverride: true },
     });
 
     fake.scriptSyncPage(
@@ -242,7 +252,7 @@ describe("syncItem — reconciliation matrix", () => {
     });
     expect(row.merchantName).toBe("Renamed Merchant"); // plaid data updated
     expect(row.amountCents).toBe(999n);
-    expect(row.categoryId).toBe("cat-user"); // user's decision intact
+    expect(row.categoryId).toBe(pinned.id); // user's decision intact
     expect(row.userCategoryOverride).toBe(true);
   });
 

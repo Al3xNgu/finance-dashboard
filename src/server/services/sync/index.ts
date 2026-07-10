@@ -3,6 +3,10 @@ import { db } from "@/server/db/client";
 import { decryptSecret } from "@/server/lib/crypto";
 import { log } from "@/server/lib/request-context";
 import { withRetry } from "@/server/lib/retry";
+import {
+  loadCategorizationContext,
+  resolveCategoryId,
+} from "@/server/services/categorization";
 import { getPlaidService } from "@/server/services/plaid";
 import { toPlaidApiError } from "@/server/services/plaid/errors";
 import type { PlaidService, SyncPage } from "@/server/services/plaid/types";
@@ -175,6 +179,9 @@ async function applyPage(
 ): Promise<AppliedCounts> {
   const applied: AppliedCounts = { added: 0, modified: 0, removed: 0 };
 
+  // read-only context; loaded outside the write transaction to keep it short
+  const catCtx = await loadCategorizationContext(userId);
+
   await db.$transaction(async (tx) => {
     const existing = await tx.account.findMany({
       where: { plaidItemId: itemId },
@@ -263,6 +270,21 @@ async function applyPage(
         deletedAt: null,
       };
 
+      // resolution order §7: override (inherited or existing) > rules > mapping
+      const autoCategory = () => ({
+        categoryId: resolveCategoryId(
+          {
+            merchantName: t.merchantName,
+            name: t.name,
+            amountCents: t.amountCents,
+            accountId,
+            pfcPrimary: t.pfcPrimary,
+            pfcDetailed: t.pfcDetailed,
+          },
+          catCtx,
+        ),
+      });
+
       const current = await tx.transaction.findUnique({
         where: { plaidTransactionId: t.plaidTransactionId },
         select: { id: true, userCategoryOverride: true },
@@ -273,7 +295,9 @@ async function applyPage(
           where: { id: current.id },
           data: {
             ...base,
-            ...(current.userCategoryOverride ? {} : (inherited ?? {})),
+            ...(current.userCategoryOverride
+              ? {}
+              : (inherited ?? autoCategory())),
           },
         });
         applied.modified += 1;
@@ -284,7 +308,7 @@ async function applyPage(
             accountId,
             plaidTransactionId: t.plaidTransactionId,
             ...base,
-            ...(inherited ?? {}),
+            ...(inherited ?? autoCategory()),
           },
         });
         applied.added += 1;
