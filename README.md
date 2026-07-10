@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Finance Dashboard
 
-## Getting Started
+A personal finance dashboard for tracking bank accounts, transactions, and spending via Plaid integration.
 
-First, run the development server:
+## Stack
+
+- **Frontend**: Next.js 16 (App Router) + React 19 + TypeScript
+- **Backend**: Node.js + Next.js API routes + TypeScript
+- **Database**: PostgreSQL 17 + Prisma ORM
+- **Authentication**: Auth.js (database sessions)
+- **Integrations**: Plaid API (bank data aggregation)
+- **Background Jobs**: Configurable queue (in-process for dev, BullMQ+Redis for production)
+- **Testing**: Vitest + Node fetch
+- **Linting & Type Checking**: ESLint + TypeScript
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 24+
+- PostgreSQL 17 (via Homebrew or Docker)
+- npm 10+
+
+### Setup
+
+1. Clone the repo and install dependencies:
+   ```bash
+   git clone <repo>
+   cd finance-dashboard
+   npm install
+   ```
+
+2. Create a `.env` file from `.env.example` and fill in required values:
+   ```bash
+   cp .env.example .env
+   ```
+   At minimum:
+   - `DATABASE_URL`: Your local Postgres connection
+   - `AUTH_SECRET`: Generate with `openssl rand -base64 32`
+   - An authentication provider: either `GOOGLE_CLIENT_ID`+`GOOGLE_CLIENT_SECRET` or `EMAIL_SERVER`+`EMAIL_FROM`
+
+3. Set up the database:
+   ```bash
+   npm run db:migrate
+   npm run db:seed
+   ```
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+   Open http://localhost:3000
+
+### Testing
+
+Tests use a separate `finance_dashboard_test` database:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx vitest run
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+By default, tests skip BullMQ tests (which require Redis). To run full tests with Redis:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+REDIS_URL=redis://localhost:6379 npx vitest run
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See `.github/workflows/ci.yml` for how CI runs tests with both Postgres and Redis services.
 
-## Learn More
+## Documentation
 
-To learn more about Next.js, take a look at the following resources:
+- **[Architecture](docs/ARCHITECTURE.md)**: System design, data flow, and component overview.
+- **[Decisions](docs/DECISIONS.md)**: Architectural decision log (why certain choices were made).
+- **[Deployment](docs/DEPLOYMENT.md)**: Production configuration, environment variables, scaling, and webhook setup.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+  app/                 # Next.js App Router pages + /api route handlers
+  components/          # React components
+  server/
+    auth/             # Auth.js configuration + requireUser()
+    db/               # Prisma client
+    lib/              # Utilities (env, errors, crypto, money, logging)
+    services/         # Business logic (plaid, items, sync, categorization, ...)
+    jobs/             # Job queue (drivers, handlers, boot)
+  shared/schemas/      # Zod schemas shared by client and server
+prisma/
+  schema.prisma       # Database schema
+  migrations/         # Prisma migrations
+tests/                # Test files
+docs/                 # Documentation
+.github/workflows/    # CI/CD
+```
 
-## Deploy on Vercel
+## Development Commands
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev`: Start development server
+- `npm run build`: Build for production
+- `npm run start`: Run production build
+- `npm run lint`: Run ESLint
+- `npm run typecheck`: Run TypeScript type checker
+- `npm test`: Run tests (alias for `npx vitest run`)
+- `npm run db:migrate`: Run pending Prisma migrations
+- `npm run db:seed`: Seed database with initial data

@@ -178,6 +178,8 @@ export async function markItemReconnected(
     throw new ConflictError("This connection was removed. Connect it again.");
   }
   log().info({ itemId: item.id }, "item marked reconnected");
+  // If a sync for this item is already in flight, this enqueue is dropped by
+  // dedup; re-validation falls to the 12h stale poller (accepted, M7 review NIT).
   await getQueue().enqueue(
     "sync-item",
     { itemId: item.id, trigger: "MANUAL" },
