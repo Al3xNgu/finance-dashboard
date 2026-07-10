@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/server/auth";
 import { AccountsList } from "@/components/accounts-list";
 import { ConnectAccountButton } from "@/components/connect-account-button";
+import { ConnectionsList } from "@/components/connections/connections-list";
 import { DashboardSummary } from "@/components/dashboard/dashboard-summary";
 import { MonthlyCashFlow } from "@/components/dashboard/monthly-cash-flow";
 import { SpendingByCategory } from "@/components/dashboard/spending-by-category";
@@ -73,6 +74,9 @@ export default async function Home() {
         </div>
         <div className="mt-6">
           <AccountsList userId={session.user.id} />
+        </div>
+        <div className="mt-6">
+          <ConnectionsList userId={session.user.id} />
         </div>
       </main>
     </div>

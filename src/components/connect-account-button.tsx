@@ -1,51 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
-
-/**
- * Pulls a human-readable message out of the API error envelope
- * ({"error":{"code","message","requestId"}}) without ever touching tokens.
- */
-async function readApiError(res: Response, fallback: string): Promise<string> {
-  try {
-    const body: unknown = await res.json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof (body as { error?: { message?: unknown } }).error?.message === "string"
-    ) {
-      return (body as { error: { message: string } }).error.message;
-    }
-  } catch {
-    // fall through to the generic message
-  }
-  return fallback;
-}
-
-/**
- * usePlaidLink requires a non-null token at initialization, so this child is
- * only mounted once a link token exists; it auto-opens Link when ready.
- */
-function PlaidLinkOpener({
-  token,
-  onSuccess,
-  onExit,
-}: {
-  token: string;
-  onSuccess: PlaidLinkOnSuccess;
-  onExit: () => void;
-}) {
-  const { open, ready } = usePlaidLink({ token, onSuccess, onExit });
-
-  useEffect(() => {
-    if (ready) open();
-  }, [ready, open]);
-
-  return null;
-}
+import type { PlaidLinkOnSuccess } from "react-plaid-link";
+import { PlaidLinkOpener, readApiError } from "@/components/plaid-link";
 
 export function ConnectAccountButton() {
   const router = useRouter();
@@ -63,7 +21,10 @@ export function ConnectAccountButton() {
         setBusy(false);
         return;
       }
-      const body = (await res.json()) as { data: { linkToken: string } };
+      const body = (await res.json()) as { data?: { linkToken?: string } };
+      if (!body.data?.linkToken) {
+        throw new Error("missing linkToken"); // caught below; avoids a stuck busy state
+      }
       setLinkToken(body.data.linkToken);
       // stays busy while Plaid Link is open
     } catch {
