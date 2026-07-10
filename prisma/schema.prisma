@@ -23,6 +23,7 @@ model User {
   sessions     Session[]
   plaidItems   PlaidItem[]
   accounts     Account[]
+  transactions Transaction[]
 }
 
 // Auth.js "Account" renamed so the domain concept "bank account" owns the
@@ -87,6 +88,7 @@ model PlaidItem {
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accounts Account[]
+  syncLogs SyncLog[]
 
   @@index([userId])
   @@index([status, lastSyncedAt]) // fallback poller (M3): stale ACTIVE items
@@ -109,9 +111,90 @@ model Account {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plaidItem PlaidItem @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plaidItem    PlaidItem     @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
 
   @@index([userId])
   @@index([plaidItemId])
+}
+
+model Transaction {
+  id                   String    @id @default(cuid())
+  userId               String
+  accountId            String
+  plaidTransactionId   String    @unique
+  pendingTransactionId String? // set by Plaid on the posted txn replacing a pending one
+  amountCents          BigInt // Plaid sign convention preserved: positive = outflow (D-006)
+  isoCurrencyCode      String    @default("USD")
+  date                 DateTime  @db.Date
+  authorizedDate       DateTime? @db.Date
+  name                 String // raw institution description
+  merchantName         String?
+  pending              Boolean
+  // categoryId is a plain column until M4 introduces the Category model + FK
+  categoryId           String?
+  userCategoryOverride Boolean   @default(false) // never recomputed by sync when true
+  plaidPfcPrimary      String? // raw Plaid personal_finance_category, kept for re-mapping
+  plaidPfcDetailed     String?
+  deletedAt            DateTime? // soft delete (Plaid `removed` set)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date(sort: Desc)])
+  @@index([userId, categoryId, date])
+  @@index([userId, merchantName])
+  @@index([userId, amountCents])
+  @@index([accountId, date])
+  @@index([pendingTransactionId])
+}
+
+enum SyncTrigger {
+  INITIAL
+  WEBHOOK
+  SCHEDULED
+  MANUAL
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model SyncLog {
+  id            String      @id @default(cuid())
+  plaidItemId   String
+  trigger       SyncTrigger
+  status        SyncStatus  @default(RUNNING)
+  addedCount    Int         @default(0)
+  modifiedCount Int         @default(0)
+  removedCount  Int         @default(0)
+  cursorBefore  String?
+  cursorAfter   String?
+  errorCode     String?
+  errorMessage  String? // sanitized; never tokens or transaction data
+  startedAt     DateTime    @default(now())
+  finishedAt    DateTime?
+
+  plaidItem PlaidItem @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+
+  @@index([plaidItemId, startedAt(sort: Desc)])
+}
+
+// Webhook audit + best-effort dedup (D-013); idempotency is layered
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  plaidItemId String? // null when the item is unknown
+  webhookType String
+  webhookCode String
+  payloadHash String // sha256 of raw body
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([payloadHash])
+  @@index([plaidItemId, receivedAt])
 }

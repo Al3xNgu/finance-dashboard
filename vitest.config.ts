@@ -5,8 +5,14 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    globalSetup: ["tests/global-setup.ts"],
+    // integration files share (and truncate) the test database
+    fileParallelism: false,
     env: {
-      DATABASE_URL: "postgresql://localhost:5432/finance_dashboard_test",
+      // CI provides its own test-db URL; local default is homebrew postgres
+      DATABASE_URL:
+        process.env.DATABASE_URL ??
+        `postgresql://${process.env.USER}@localhost:5432/finance_dashboard_test`,
       AUTH_SECRET: "vitest-secret-vitest-secret-vitest-secret",
       ENCRYPTION_KEY: Buffer.alloc(32, 9).toString("base64"),
     },

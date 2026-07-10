@@ -37,6 +37,33 @@ export interface InstitutionData {
   name: string;
 }
 
+export interface PlaidTransactionData {
+  plaidTransactionId: string;
+  plaidAccountId: string;
+  pendingTransactionId: string | null;
+  amountCents: bigint;
+  isoCurrencyCode: string;
+  /** YYYY-MM-DD */
+  date: string;
+  /** YYYY-MM-DD */
+  authorizedDate: string | null;
+  name: string;
+  merchantName: string | null;
+  pending: boolean;
+  pfcPrimary: string | null;
+  pfcDetailed: string | null;
+}
+
+export interface SyncPage {
+  added: PlaidTransactionData[];
+  modified: PlaidTransactionData[];
+  removed: { plaidTransactionId: string }[];
+  /** account balances as of this page — refreshed during sync */
+  accounts: PlaidAccountData[];
+  nextCursor: string;
+  hasMore: boolean;
+}
+
 export interface PlaidService {
   createLinkToken(opts: {
     userId: string;
@@ -47,4 +74,11 @@ export interface PlaidService {
   getAccounts(accessToken: string): Promise<AccountsResult>;
   getInstitution(institutionId: string): Promise<InstitutionData>;
   removeItem(accessToken: string): Promise<void>;
+  /** one page of /transactions/sync; cursor null = initial sync */
+  syncTransactions(
+    accessToken: string,
+    cursor: string | null,
+  ): Promise<SyncPage>;
+  /** verify a Plaid webhook JWT against the raw request body */
+  verifyWebhook(rawBody: string, headers: Headers): Promise<boolean>;
 }

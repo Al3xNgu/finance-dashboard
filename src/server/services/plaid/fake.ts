@@ -6,6 +6,7 @@ import type {
   LinkTokenResult,
   PlaidAccountData,
   PlaidService,
+  SyncPage,
 } from "./types";
 
 /**
@@ -72,5 +73,48 @@ export class FakePlaidService implements PlaidService {
 
   async removeItem(accessToken: string): Promise<void> {
     this.calls.push({ method: "removeItem", args: accessToken });
+  }
+
+  /**
+   * Sync scripting: pages are keyed by the cursor that requests them
+   * (null-cursor key is ""). A page may instead be an Error to throw —
+   * lets tests simulate TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION etc.
+   */
+  private syncPages = new Map<string, SyncPage | Error>();
+
+  scriptSyncPage(cursor: string | null, page: SyncPage | Error): void {
+    this.syncPages.set(cursor ?? "", page);
+  }
+
+  async syncTransactions(
+    accessToken: string,
+    cursor: string | null,
+  ): Promise<SyncPage> {
+    this.calls.push({ method: "syncTransactions", args: { accessToken, cursor } });
+    const page = this.syncPages.get(cursor ?? "");
+    if (!page) {
+      // default: empty caught-up page
+      return {
+        added: [],
+        modified: [],
+        removed: [],
+        accounts: [],
+        nextCursor: cursor ?? "cursor-0",
+        hasMore: false,
+      };
+    }
+    if (page instanceof Error) {
+      // one-shot error: next call with the same cursor proceeds
+      this.syncPages.delete(cursor ?? "");
+      throw page;
+    }
+    return page;
+  }
+
+  webhookValid = true;
+
+  async verifyWebhook(): Promise<boolean> {
+    this.calls.push({ method: "verifyWebhook", args: null });
+    return this.webhookValid;
   }
 }
