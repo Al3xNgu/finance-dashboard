@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/server/auth";
 import { AccountsList } from "@/components/accounts-list";
 import { ConnectAccountButton } from "@/components/connect-account-button";
+import { DashboardSummary } from "@/components/dashboard/dashboard-summary";
+import { MonthlyCashFlow } from "@/components/dashboard/monthly-cash-flow";
+import { SpendingByCategory } from "@/components/dashboard/spending-by-category";
 
 export default async function Home() {
   const session = await auth();
@@ -60,6 +63,13 @@ export default async function Home() {
             </p>
           </div>
           <ConnectAccountButton />
+        </div>
+        <div className="mt-6">
+          <DashboardSummary userId={session.user.id} />
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <SpendingByCategory userId={session.user.id} />
+          <MonthlyCashFlow userId={session.user.id} />
         </div>
         <div className="mt-6">
           <AccountsList userId={session.user.id} />
