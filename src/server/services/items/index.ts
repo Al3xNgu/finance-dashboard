@@ -1,12 +1,13 @@
 import "server-only";
-import { encryptSecret } from "@/server/lib/crypto";
+import { decryptSecret, encryptSecret } from "@/server/lib/crypto";
 import { db } from "@/server/db/client";
-import { ConflictError } from "@/server/lib/errors";
+import { ConflictError, NotFoundError } from "@/server/lib/errors";
 import { centsToNumber } from "@/server/lib/money";
 import { log } from "@/server/lib/request-context";
 import { getQueue } from "@/server/jobs";
 import { getPlaidService } from "@/server/services/plaid";
 import type { PlaidService } from "@/server/services/plaid";
+import { PlaidApiError } from "@/server/services/plaid/errors";
 
 export interface AccountDto {
   id: string;
@@ -26,6 +27,7 @@ export interface ItemDto {
   institutionId: string;
   institutionName: string;
   status: string;
+  errorCode: string | null;
   lastSyncedAt: string | null;
   accountCount: number;
 }
@@ -119,17 +121,129 @@ export async function exchangePublicToken(
     institutionId: item.institutionId,
     institutionName: item.institutionName,
     status: item.status,
+    errorCode: item.errorCode,
     lastSyncedAt: item.lastSyncedAt?.toISOString() ?? null,
     accountCount: accounts.length,
   };
 }
 
+/**
+ * Link token for connect (no itemId) or update mode (itemId given — D-018).
+ * The decrypted access token exists only inside this function's scope.
+ */
 export async function createLinkTokenForUser(
   userId: string,
+  itemId?: string,
   plaid: PlaidService = getPlaidService(),
 ): Promise<{ linkToken: string }> {
-  const { linkToken } = await plaid.createLinkToken({ userId });
+  if (!itemId) {
+    const { linkToken } = await plaid.createLinkToken({ userId });
+    return { linkToken };
+  }
+  const item = await requireOwnItem(userId, itemId);
+  if (item.status === "DISCONNECTED") {
+    // /item/remove invalidated the token; only a fresh connect can revive it
+    throw new ConflictError("This connection was removed. Connect it again.");
+  }
+  const { linkToken } = await plaid.createLinkToken({
+    userId,
+    accessToken: decryptSecret(item.encryptedAccessToken),
+  });
   return { linkToken };
+}
+
+async function requireOwnItem(userId: string, itemId: string) {
+  const item = await db.plaidItem.findFirst({
+    where: { id: itemId, userId },
+    select: { id: true, status: true, encryptedAccessToken: true },
+  });
+  // 404 (not 403) so ids are no existence oracle
+  if (!item) throw new NotFoundError("Connection not found.");
+  return item;
+}
+
+/** Client-asserted reconnect completion after update-mode Link (D-018). */
+export async function markItemReconnected(
+  userId: string,
+  itemId: string,
+): Promise<void> {
+  const item = await requireOwnItem(userId, itemId);
+  // conditional write: a disconnect committed between the read above and this
+  // update must win — DISCONNECTED is terminal (M7 review finding)
+  const updated = await db.plaidItem.updateMany({
+    where: { id: item.id, status: { not: "DISCONNECTED" } },
+    data: { status: "ACTIVE", errorCode: null },
+  });
+  if (updated.count === 0) {
+    throw new ConflictError("This connection was removed. Connect it again.");
+  }
+  log().info({ itemId: item.id }, "item marked reconnected");
+  await getQueue().enqueue(
+    "sync-item",
+    { itemId: item.id, trigger: "MANUAL" },
+    { dedupKey: `sync-item:${item.id}` },
+  );
+}
+
+/** Revoke at Plaid, keep local history readable (D-019). */
+export async function disconnectItem(
+  userId: string,
+  itemId: string,
+  plaid: PlaidService = getPlaidService(),
+): Promise<void> {
+  const item = await requireOwnItem(userId, itemId);
+  if (item.status !== "DISCONNECTED") {
+    try {
+      await plaid.removeItem(decryptSecret(item.encryptedAccessToken));
+    } catch (err) {
+      // Item already gone at Plaid → the goal state is reached; anything
+      // retryable propagates so the user can retry the disconnect.
+      if (!(err instanceof PlaidApiError && err.classification === "FATAL")) {
+        throw err;
+      }
+    }
+  }
+  await db.plaidItem.update({
+    where: { id: item.id },
+    data: { status: "DISCONNECTED" },
+  });
+  log().info({ itemId: item.id }, "item disconnected");
+}
+
+export interface SyncLogDto {
+  id: string;
+  trigger: string;
+  status: string;
+  addedCount: number;
+  modifiedCount: number;
+  removedCount: number;
+  errorCode: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export async function listSyncLogs(
+  userId: string,
+  itemId: string,
+  limit = 10,
+): Promise<SyncLogDto[]> {
+  await requireOwnItem(userId, itemId);
+  const logs = await db.syncLog.findMany({
+    where: { plaidItemId: itemId },
+    orderBy: { startedAt: "desc" },
+    take: limit,
+  });
+  return logs.map((l) => ({
+    id: l.id,
+    trigger: l.trigger,
+    status: l.status,
+    addedCount: l.addedCount,
+    modifiedCount: l.modifiedCount,
+    removedCount: l.removedCount,
+    errorCode: l.errorCode,
+    startedAt: l.startedAt.toISOString(),
+    finishedAt: l.finishedAt?.toISOString() ?? null,
+  }));
 }
 
 export async function listItems(userId: string): Promise<ItemDto[]> {
@@ -143,6 +257,7 @@ export async function listItems(userId: string): Promise<ItemDto[]> {
     institutionId: i.institutionId,
     institutionName: i.institutionName,
     status: i.status,
+    errorCode: i.errorCode,
     lastSyncedAt: i.lastSyncedAt?.toISOString() ?? null,
     accountCount: i._count.accounts,
   }));

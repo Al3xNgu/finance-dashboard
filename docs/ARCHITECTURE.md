@@ -401,6 +401,8 @@ except where noted. Common error envelope in §7.
 | POST | `/api/v1/plaid/webhook` | Plaid webhooks (public; signature-verified; enqueue only) |
 | GET | `/api/v1/items` | List connected institutions with status |
 | POST | `/api/v1/items/:id/sync` | Manual sync trigger (enqueues) |
+| POST | `/api/v1/items/:id/reconnected` | Client-asserted update-mode Link completion → ACTIVE + sync (D-018) |
+| GET | `/api/v1/items/:id/sync-logs` | Recent sync history for a connection |
 | DELETE | `/api/v1/items/:id` | Disconnect (Plaid `/item/remove` + mark DISCONNECTED) |
 | GET | `/api/v1/accounts` | Accounts with balances |
 | GET | `/api/v1/transactions` | List; filters: `dateFrom,dateTo,categoryId,accountId,merchant` (fuzzy), `minAmountCents,maxAmountCents,pending,search`; sort: `date\|amount\|merchant`; cursor pagination (D-011) |

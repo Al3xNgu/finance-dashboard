@@ -112,3 +112,21 @@ unverified BullMQ driver in M3.
 First-class TS/ESM without transform config, same assertion API, faster watch mode,
 maintained momentum in the Next.js ecosystem. Rejected: Jest (ESM friction with
 Next 16 / React 19 stack).
+
+**D-018 — Reconnect completion is client-asserted, webhook-confirmed**
+After update-mode Link succeeds, the client POSTs `/items/:id/reconnected`; the server
+sets the item ACTIVE, clears `errorCode`, and enqueues a sync. The access token is
+unchanged in update mode, so this path never touches token material. A false assertion
+self-corrects: the next sync fails REAUTH and the item returns to `LOGIN_REQUIRED`.
+The `LOGIN_REPAIRED` webhook does the same server-side when deliverable (production);
+locally (no public webhook URL) the client assertion is the only signal. Rejected:
+webhook-only (dead in local dev, laggy in prod), re-running token exchange (update
+mode issues no new public_token to exchange).
+
+**D-019 — Disconnect revokes at Plaid but retains history**
+`DELETE /items/:id` calls Plaid `/item/remove`, then marks the item `DISCONNECTED`;
+accounts and transactions stay readable (per §3 status comment). If Plaid reports the
+item already gone (FATAL classification), disconnect proceeds — the goal state is
+reached; retryable upstream failures propagate so the user can retry. Rejected: row
+deletion (destroys transaction history the dashboards are built on), soft-delete
+without Plaid revocation (institution keeps sharing data).

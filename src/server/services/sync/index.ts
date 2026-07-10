@@ -112,8 +112,10 @@ export async function syncItem(
     }
 
     await db.$transaction([
-      db.plaidItem.update({
-        where: { id: item.id },
+      // DISCONNECTED is terminal: a sync that raced a disconnect must not
+      // resurrect the item (M7 review finding)
+      db.plaidItem.updateMany({
+        where: { id: item.id, status: { not: "DISCONNECTED" } },
         data: { lastSyncedAt: new Date(), status: "ACTIVE", errorCode: null },
       }),
       db.syncLog.update({
@@ -139,8 +141,9 @@ export async function syncItem(
           ? "DISCONNECTED"
           : "ERROR";
     await db.$transaction([
-      db.plaidItem.update({
-        where: { id: item.id },
+      // same terminal-state guard as the success path
+      db.plaidItem.updateMany({
+        where: { id: item.id, status: { not: "DISCONNECTED" } },
         data: { status: itemStatus, errorCode: perr.plaidErrorCode },
       }),
       db.syncLog.update({
