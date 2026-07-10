@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db/client";
 import { encryptSecret } from "@/server/lib/crypto";
 import { ValidationError } from "@/server/lib/errors";
@@ -51,7 +52,7 @@ type World = Awaited<ReturnType<typeof seedWorld>>;
 let seq = 0;
 function makeTxn(
   w: World,
-  over: Partial<Parameters<typeof db.transaction.create>[0]["data"]> = {},
+  over: Partial<Prisma.TransactionUncheckedCreateInput> = {},
 ) {
   seq += 1;
   return db.transaction.create({
