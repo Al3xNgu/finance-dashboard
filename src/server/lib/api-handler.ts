@@ -76,6 +76,35 @@ export async function parseBody<S extends z.ZodType>(
   return result.data;
 }
 
+/**
+ * Like parseBody, but an empty body is valid and parses as {} — for endpoints
+ * whose body is entirely optional (e.g. link-token's update-mode itemId).
+ */
+export async function parseOptionalBody<S extends z.ZodType>(
+  req: NextRequest,
+  schema: S,
+): Promise<z.infer<S>> {
+  const raw = await req.text();
+  let parsed: unknown = {};
+  if (raw.trim() !== "") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new ValidationError("Request body must be valid JSON.");
+    }
+  }
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    throw new ValidationError("Invalid request body.", {
+      details: result.error.issues.map((i) => ({
+        path: i.path.join("."),
+        message: i.message,
+      })),
+    });
+  }
+  return result.data;
+}
+
 /** Parse and validate query params at the API boundary. */
 export function parseQuery<S extends z.ZodType>(
   req: NextRequest,

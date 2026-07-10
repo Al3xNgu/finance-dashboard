@@ -43,6 +43,9 @@ export const envSchema = z.object({
   // M3 — background jobs
   QUEUE_DRIVER: z.enum(["inprocess", "bullmq"]).default("inprocess"),
   REDIS_URL: z.string().optional(),
+  // bullmq only: "producer" replicas enqueue but never run a Worker, so one
+  // "worker"/"all" instance owns job execution (M8 security review)
+  QUEUE_ROLE: z.enum(["all", "producer", "worker"]).default("all"),
 }).superRefine((cfg, ctx) => {
   const hasGoogle = !!cfg.GOOGLE_CLIENT_ID && !!cfg.GOOGLE_CLIENT_SECRET;
   const hasEmail = !!cfg.EMAIL_SERVER && !!cfg.EMAIL_FROM;
@@ -52,6 +55,13 @@ export const envSchema = z.object({
       path: ["EMAIL_SERVER"],
       message:
         "production needs a sign-in provider: EMAIL_SERVER+EMAIL_FROM or GOOGLE_CLIENT_ID+GOOGLE_CLIENT_SECRET",
+    });
+  }
+  if (cfg.QUEUE_DRIVER === "bullmq" && !cfg.REDIS_URL) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["REDIS_URL"],
+      message: "REDIS_URL is required when QUEUE_DRIVER=bullmq (D-020)",
     });
   }
   const plaidVars = [cfg.PLAID_CLIENT_ID, cfg.PLAID_SECRET];

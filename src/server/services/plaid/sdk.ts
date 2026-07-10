@@ -190,6 +190,24 @@ export function createPlaidSdkService(cfg: PlaidSdkConfig): PlaidService {
  * via /webhook_verification_key/get and cached by kid.
  * https://plaid.com/docs/api/webhooks/webhook-verification/
  */
+// The kid comes from an UNVERIFIED JWT header; the key fetch it triggers is an
+// authenticated outbound Plaid call. Guards (M8 security review): kid shape
+// check, a short-TTL negative cache for failed lookups, and a global budget on
+// key fetches so bogus kids can't burn Plaid quota.
+const KID_SHAPE = /^[A-Za-z0-9_-]{1,64}$/;
+const NEGATIVE_TTL_MS = 5 * 60_000;
+const failedKids = new Map<string, number>();
+let keyFetchWindow = { start: 0, count: 0 };
+const KEY_FETCHES_PER_MINUTE = 10;
+
+function keyFetchAllowed(now: number): boolean {
+  if (now - keyFetchWindow.start >= 60_000) {
+    keyFetchWindow = { start: now, count: 0 };
+  }
+  keyFetchWindow.count += 1;
+  return keyFetchWindow.count <= KEY_FETCHES_PER_MINUTE;
+}
+
 async function verifyPlaidWebhook(
   client: PlaidApi,
   rawBody: string,
@@ -202,14 +220,28 @@ async function verifyPlaidWebhook(
 
     const header = decodeProtectedHeader(jwt);
     if (header.alg !== "ES256" || typeof header.kid !== "string") return false;
+    if (!KID_SHAPE.test(header.kid)) return false;
 
     let jwk = keyCache.get(header.kid);
     if (!jwk) {
-      const res = await client.webhookVerificationKeyGet({
-        key_id: header.kid,
-      });
-      jwk = res.data.key as unknown as JWK;
-      keyCache.set(header.kid, jwk);
+      const now = Date.now();
+      const failedAt = failedKids.get(header.kid);
+      if (failedAt !== undefined && now - failedAt < NEGATIVE_TTL_MS) {
+        return false;
+      }
+      if (failedKids.size > 1000) failedKids.clear(); // bounded
+      if (!keyFetchAllowed(now)) return false;
+      try {
+        const res = await client.webhookVerificationKeyGet({
+          key_id: header.kid,
+        });
+        jwk = res.data.key as unknown as JWK;
+        keyCache.set(header.kid, jwk);
+        failedKids.delete(header.kid);
+      } catch (err) {
+        failedKids.set(header.kid, now);
+        throw err;
+      }
     }
 
     const { payload } = await jwtVerify(jwt, await importJWK(jwk, "ES256"), {

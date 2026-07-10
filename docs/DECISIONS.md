@@ -130,3 +130,21 @@ item already gone (FATAL classification), disconnect proceeds — the goal state
 reached; retryable upstream failures propagate so the user can retry. Rejected: row
 deletion (destroys transaction history the dashboards are built on), soft-delete
 without Plaid revocation (institution keeps sharing data).
+
+**D-020 — BullMQ production driver; its tests are Redis-gated**
+The `bullmq` driver implements `JobQueue` (M8, closing D-017): dedup via
+deterministic BullMQ job ids derived from the dedupKey, repeatable jobs for
+`schedule()`. `QUEUE_DRIVER=bullmq` requires `REDIS_URL` (env schema enforces the
+pair). Driver tests run only when `REDIS_URL` is set — skipped on dev machines
+without Redis, always exercised in CI via a redis service container. Rejected:
+requiring local Redis (blocks development on this machine, D-014's reasoning),
+platform-specific queues (couples the repo to one host).
+
+**D-021 — Magic-link rate limiting is in-memory, per instance**
+A sliding-window limiter (per client IP and per requested email) wraps the Auth.js
+sign-in POST. In-memory suits the single-instance deployment this app targets; the
+window state is process-local and resets on restart, which only weakens (never
+blocks) legitimate use. Multi-instance deployments should move the window to Redis —
+noted in DEPLOYMENT.md. Rejected: DB-backed windows (adds a hot table + cleanup job
+for a single-user app), edge-middleware limiting (proxy.ts is optimistic-only by
+design, ARCHITECTURE.md §5).
