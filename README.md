@@ -2,6 +2,17 @@
 
 A personal finance dashboard for tracking bank accounts, transactions, and spending via Plaid integration.
 
+Connect your bank accounts, and the dashboard keeps your transactions in sync automatically, sorts them into categories, and charts where your money goes.
+
+## Features
+
+- **Bank connections through Plaid Link**, with a reconnect flow when a bank asks you to log in again and disconnects that keep your history
+- **Automatic transaction sync**, triggered by verified Plaid webhooks, with fallback polling every 6 hours so syncs still happen if webhooks fail
+- **Layered categorization:** your manual overrides win, then your own rules in priority order, then Plaid's categories
+- **Dashboard** with summary stats, spending by category, and cash-flow charts
+- **Transactions page** with filters, cursor pagination, and inline category editing
+- **Security:** Plaid access tokens encrypted at rest (AES-256-GCM), security headers, rate-limited magic-link sign-in, and gitleaks secret scanning in CI
+
 ## Stack
 
 - **Frontend**: Next.js 16 (App Router) + React 19 + TypeScript
@@ -25,7 +36,7 @@ A personal finance dashboard for tracking bank accounts, transactions, and spend
 
 1. Clone the repo and install dependencies:
    ```bash
-   git clone <repo>
+   git clone https://github.com/Al3xNgu/finance-dashboard.git
    cd finance-dashboard
    npm install
    ```
